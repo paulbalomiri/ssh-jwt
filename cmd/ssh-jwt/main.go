@@ -82,6 +82,10 @@ func root() error {
 			RunE: signCmd,
 		},
 		&cobra.Command{
+			Use:  "signjson [input] [output]",
+			RunE: signJsonCmd,
+		},
+		&cobra.Command{
 			Use:  "verify",
 			RunE: verifyCmd,
 			Args: cobra.MinimumNArgs(1),
