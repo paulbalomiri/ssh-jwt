@@ -7,12 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"net"
-	"os"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
-	sshagent "golang.org/x/crypto/ssh/agent"
 
 	"go.ptx.dk/ssh-jwt"
 )
@@ -33,25 +30,29 @@ type JWKSet struct {
 }
 
 func jwkCmd(cmd *cobra.Command, args []string) error {
-	// Get the SSH agent connection directly
+	// Get the SSH agent connection 
 	agent, err := getAgent()
 	if err != nil {
 		return err
 	}
 
-	// Verify we can access keys
-	keys, err := agent.AllKeys()
+	// Get the first key with comment information
+	keyWrapper, err := agent.FirstKey()
 	if err != nil {
 		return err
 	}
 
-	if len(keys) == 0 {
-		return fmt.Errorf("no keys found in SSH agent")
+	// Use the comment from the SSH agent key for a more descriptive key ID
+	// But allow override with the --kid flag
+	var keyComment string
+	if jwkKeyID != "" {
+		keyComment = jwkKeyID
+	} else {
+		keyComment = keyWrapper.Comment()
 	}
 
-	// Since we can't access the private fields directly, let's create a JWK
-	// by recreating the SSH client connection and accessing keys
-	jwk, err := extractJWKFromAgent()
+	// Convert SSH public key to JWK format
+	jwk, err := sshPublicKeyToJWK(keyWrapper.PublicKey(), keyComment)
 	if err != nil {
 		return err
 	}
@@ -63,44 +64,6 @@ func jwkCmd(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(string(output))
 	return nil
-}
-
-// Helper function to extract JWK by directly accessing SSH agent
-func extractJWKFromAgent() (*JWK, error) {
-	// Create a new SSH agent connection similar to getAgent()
-	conn, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK"))
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	client := sshagent.NewClient(conn)
-	keys, err := client.List()
-	if err != nil {
-		return nil, err
-	}
-
-	if len(keys) == 0 {
-		return nil, fmt.Errorf("no keys found in SSH agent")
-	}
-
-	// Use the first key - parse the agent.Key to get an ssh.PublicKey
-	agentKey := keys[0]
-	pubKey, err := ssh.ParsePublicKey(agentKey.Blob)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse public key: %w", err)
-	}
-	
-	// Use the comment from the SSH agent key for a more descriptive key ID
-	// But allow override with the --key-id flag
-	var keyComment string
-	if jwkKeyID != "" {
-		keyComment = jwkKeyID
-	} else {
-		keyComment = agentKey.Comment
-	}
-	
-	return sshPublicKeyToJWK(pubKey, keyComment)
 }
 
 func sshPublicKeyToJWK(pubKey ssh.PublicKey, keyComment string) (*JWK, error) {
