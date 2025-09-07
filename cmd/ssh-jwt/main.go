@@ -14,6 +14,9 @@ import (
 	"go.ptx.dk/ssh-jwt"
 )
 
+// Version information
+const Version = "0.1.0"
+
 func main() {
 	sshjwt.RegisterSigner()
 
@@ -65,7 +68,21 @@ func keyringWithKey(keyFile, pass string) (sshjwt.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, err := ssh.ParseRawPrivateKeyWithPassphrase(data, []byte(pass))
+	
+	var key interface{}
+	if pass != "" {
+		// Try with password first if provided
+		key, err = ssh.ParseRawPrivateKeyWithPassphrase(data, []byte(pass))
+	} else {
+		// Try without password first
+		key, err = ssh.ParseRawPrivateKey(data)
+		if err != nil {
+			// If it fails and we don't have a password, try with empty password
+			// This handles some edge cases where the key might expect empty passphrase
+			key, err = ssh.ParseRawPrivateKeyWithPassphrase(data, []byte(""))
+		}
+	}
+	
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +93,7 @@ func keyringWithKey(keyFile, pass string) (sshjwt.Agent, error) {
 func root() error {
 	cmd := &cobra.Command{
 		Use: "ssh-jwt",
+		Version: Version,
 	}
 	
 	// Create JWK command with its own flags
@@ -100,6 +118,13 @@ func root() error {
 			Use:  "verify",
 			RunE: verifyCmd,
 			Args: cobra.MinimumNArgs(1),
+		},
+		&cobra.Command{
+			Use:   "version",
+			Short: "Print version information",
+			Run: func(cmd *cobra.Command, args []string) {
+				fmt.Printf("ssh-jwt version %s\n", Version)
+			},
 		},
 	)
 	cmd.PersistentFlags().StringVar(&flagKey, "key", "", "")
