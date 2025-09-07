@@ -27,6 +27,7 @@ var getDefaultAgent = sshjwt.DefaultAgent
 var (
 	flagKey  string
 	flagPass string
+	jwkKeyID string
 )
 
 func isFile(p string) (bool, error) {
@@ -76,6 +77,15 @@ func root() error {
 	cmd := &cobra.Command{
 		Use: "ssh-jwt",
 	}
+	
+	// Create JWK command with its own flags
+	jwkCommand := &cobra.Command{
+		Use:   "jwk",
+		Short: "Generate JSON Web Key (JWK) from SSH agent key",
+		RunE:  jwkCmd,
+	}
+	jwkCommand.Flags().StringVar(&jwkKeyID, "kid", "", "Override the key ID (defaults to SSH key comment)")
+	
 	cmd.AddCommand(
 		&cobra.Command{
 			Use:  "sign",
@@ -85,6 +95,7 @@ func root() error {
 			Use:  "signjson [input] [output]",
 			RunE: signJsonCmd,
 		},
+		jwkCommand,
 		&cobra.Command{
 			Use:  "verify",
 			RunE: verifyCmd,
